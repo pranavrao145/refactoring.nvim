@@ -6,6 +6,7 @@ local code_utils = require("refactoring.code_generation.utils")
 local Region = require("refactoring.region")
 local Point = require("refactoring.point")
 local lsp_utils = require("refactoring.lsp_utils")
+local ts_utils = require("nvim-treesitter.ts_utils")
 
 local refactor_setup = require("refactoring.tasks.refactor_setup")
 local get_input = require("refactoring.get_input")
@@ -380,9 +381,32 @@ local function extract_block_setup(refactor)
         refactor.bufnr,
         first_line_region.start_row,
         first_line_region.start_col,
-        last_line_region.end_row + 1,
+        last_line_region.end_row,
         last_line_region.end_col
     )
+
+    local curr_node = function_body[1]
+
+    -- find the last named node in the scope
+    while curr_node:next_named_sibling() do
+        curr_node = curr_node:next_named_sibling()
+    end
+
+    -- these statements are weird, they cause an extra row to need to be added to the region
+    local offending_statements = {
+        ["for_statement"] = true,
+        ["for_in_statement"] = true,
+        ["while_statement"] = true,
+        ["do_statement"] = true,
+        ["if_statement"] = true,
+        ["repeat_statement"] = true,
+    }
+
+    -- if the last statement is an offending statement, add one to the row
+    if offending_statements[curr_node:type()] then
+        final_region.end_row = final_region.end_row + 1
+    end
+
     local final_region_node = final_region:to_ts_node(refactor.ts:get_root())
 
     refactor.region = final_region
